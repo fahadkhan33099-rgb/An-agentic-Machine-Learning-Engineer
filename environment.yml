@@ -1,0 +1,12 @@
+name: shot-analyzer
+channels: [conda-forge, pytorch]
+dependencies:
+  - python=3.10
+  - pytorch
+  - numpy
+  - opencv
+  - matplotlib
+  - pandas
+  - pip
+  - pip:
+      - scenedetect[opencv]>=0.6.4
