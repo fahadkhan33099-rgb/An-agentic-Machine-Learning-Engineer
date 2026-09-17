@@ -1,106 +1,44 @@
-# Karpathy
+# Free Local Video Shot & Transition Analyzer
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/K-Dense-AI/karpathy/pulls)
+A modular Python 3.10+ application for local video shot analysis. It writes zero-based, exact frame boundaries; shot ranges; detector evidence; JSON/CSV; full-resolution boundary frames; a timeline; and a boundary contact sheet. It does **not** call OpenAI, Gemini, Twelve Labs, or any paid cloud video API.
 
-An agentic Machine Learning Engineer that trains state-of-the-art ML models using Claude Code SDK and Google ADK. This is a very simple implemenation demonstraing the power of Claude Scientific Skills for machine learning.
+## Install
 
-## Prerequisites
-
-- Python 3.13 or higher
-- [uv](https://github.com/astral-sh/uv) package manager
-- Claude Code installed and authenticated (see [installation guide](https://www.claude.com/product/claude-code))
-
-## Setup
-
-### 1. Clone the Repository
+Install FFmpeg/FFprobe (on Ubuntu: `sudo apt install ffmpeg`), then create an environment:
 
 ```bash
-git clone https://github.com/K-Dense-AI/karpathy.git
-cd karpathy
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
 ```
 
-### 2. Install Dependencies
+Install PyTorch appropriate for the local CPU/CUDA platform from [pytorch.org](https://pytorch.org/get-started/locally/). Install OmniShotCut v1.5 locally and configure its command as described in [`models/README.md`](models/README.md). The application intentionally fails with an actionable message if its configured primary detector is absent; it never silently replaces it with frame differencing or an inferior detector.
 
-Install dependencies using `uv`:
+## Usage
 
 ```bash
-uv sync
+python -m app.cli analyze input.mp4 \
+  --output ./output \
+  --device auto \
+  --omnishotcut-command 'python /opt/omnishotcut/run.py --input {video} --json-stdout' \
+  --verify --extract-frames --timeline --seed 7
 ```
 
-### 3. Environment Variables
+`--verify` enables optional TransNet V2 (configure with `--transnet-command`) and PySceneDetect. Detector adapters receive and return a normalized `Boundary`; model-specific JSON parsing stays in the adapter. The ensemble clusters candidates within `--boundary-tolerance` (default ±2 frames), preserves agreement, and reports a heuristic agreement score—not a calibrated probability.
 
-Create a `.env` file in the `karpathy` directory with your API keys:
+## Frame semantics and outputs
 
-```bash
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-AGENT_MODEL=your_model_name_here
-```
+All frame numbers are **zero-based**. A boundary at frame `N` means the first frame of the next shot: its extracted pair is `N - 1` (`before`) and `N` (`after`). This keeps exact decoded frame identity instead of converting timestamps back to frames, which is ambiguous for variable-frame-rate sources.
 
-The `OPENROUTER_API_KEY` is required for the agent to function properly.
+Outputs in `--output` are:
 
-This is the same environment variable that will be copied to the `sandbox` directory so the agents can use any API keys you provide here.
+- `shots.json`, `shots.csv`, and `boundaries.json` (including model/version/evidence data)
+- `boundary_frames/boundary_###_before.jpg` and `_after.jpg`
+- `shot_frames/shot_###_start.jpg` and `_end.jpg`
+- `timeline.png` and `boundaries.jpg`
 
-## Quick Start
+## Transition classification and limits
 
-Run the startup script to set up the sandbox and start the ADK web interface:
+Classification analyzes a temporal window (default 15 frames) using luminance, spatial mixture, and temporal progression. It conservatively emits `CUT`, `FADE` (`Fade Black`/`Fade White`), `DISSOLVE`, `WIPE` (direction only when supported), or `UNKNOWN`. Fade detection requires both an extreme uniform region and surrounding luminance change to reduce dark/bright-scene false positives. Cut subtype mapping is modular in `app/classifiers/cut_subtype.py`; without supported MovieCuts evidence, the app does not fabricate cinematic labels.
 
-```bash
-python start.py
-```
-
-This automatically:
-1. Creates a `sandbox` directory with scientific skills from Claude Scientific Skills
-2. Sets up a Python virtual environment with ML packages (PyTorch, transformers, scikit-learn, etc.)
-3. Copies your `.env` file to the sandbox
-4. Starts the ADK web interface
-5. Navigate to **http://localhost:8000** in your browser
-6. Select `karpathy` in the top left under 'Select an agent'
-7. All outputs will be in the `sandbox` directory so continue to monitor that as you converse with the agent
-
-**Note:** Any files you want the agent to use (datasets, scripts, etc.) should be manually added to the `sandbox` directory.
-
-## Community
-
-Join our K-Dense Slack community to connect with other users, share ideas, and get support:
-
-**[Join K-Dense Slack Community](https://join.slack.com/t/k-densecommunity/shared_invite/zt-3iajtyls1-EwmkwIZk0g_o74311Tkf5g)**
-
-## Claude Scientific Skills
-
-This repository is designed to work with the **[Claude Scientific Skills](https://github.com/K-Dense-AI/claude-scientific-skills)** collection of ready-to-use scientific tools and workflows ([link](https://github.com/K-Dense-AI/claude-scientific-skills)). The `start.py` setup script creates a `sandbox` that includes scientific skills from this collection so the `karpathy` agent can leverage specialized ML libraries and scientific workflows. For full details on the skills themselves, see the upstream repository’s README and documentation [here](https://github.com/K-Dense-AI/claude-scientific-skills).
-
-## Manual Usage
-
-To set up the sandbox without starting the web interface:
-
-```bash
-python -m karpathy.utils
-```
-
-**Note:** Any files you want the agent to use (datasets, scripts, etc.) should be manually added to the `sandbox` directory.
-
-To run the ADK web interface manually:
-
-```bash
-adk web
-```
-
-Then navigate to **http://localhost:8000** in your browser.
-
-## Enhanced ML Capabilities
-
-If you want substantially more powerful ML capabilities through a multi-agentic system, sign up for [www.k-dense.ai](https://www.k-dense.ai). Currently in closed beta, launching publicly in December 2025.
-
-## Upcoming Features
-
-- **Modal sandbox integration** - Choose any type of compute you want
-- **K-Dense Web features** - We might make some features from K-Dense Web available here based on interest
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=K-Dense-AI/karpathy&type=date&legend=top-left)](https://www.star-history.com/#K-Dense-AI/karpathy&type=date&legend=top-left)
-
-## Disclaimer
-
-This project is **not** endorsed by or affiliated with Andrej Karpathy. The name is used as a tribute and out of deep respect for his contributions to AI and technical leadership.
+Camera pans, zooms, dolly/handheld movement, and subject motion are not primary detection signals: boundaries come from the model detectors and verification ensemble, never simple frame-difference thresholding. Results remain dependent on local model quality and should be reviewed with the contact sheet.
